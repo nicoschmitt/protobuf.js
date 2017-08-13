@@ -1,6 +1,6 @@
 /*!
  * protobuf.js v6.8.0 (c) 2016, daniel wirtz
- * compiled fri, 09 jun 2017 21:00:38 utc
+ * compiled sun, 13 aug 2017 07:58:36 utc
  * licensed under the bsd-3-clause license
  * see: https://github.com/dcodeio/protobuf.js for details
  */
@@ -1865,7 +1865,8 @@ function decoder(mtype) {
     // Unknown fields
     } gen
             ("default:")
-                ("r.skipType(t&7)")
+                ("Object.defineProperty(m,\"__unknownFields\",{writable:true,configurable:true,enumerable:false })")
+                ("m[\"__unknownFields\"]=r.rawBytes(t,m[\"__unknownFields\"])")
                 ("break")
 
         ("}")
@@ -4967,6 +4968,41 @@ Reader.prototype.skipType = function(wireType) {
     return this;
 };
 
+
+/**
+ * Returns the next element of the specified wire type as bytes
+ * @param {number} id_wireType field id and wire type
+ * @param {Uint8Array} append previously encountered unknown fields, if any
+ * @returns {Uint8Array} value read
+ */
+Reader.prototype.rawBytes = function read_raw_bytes(id_wireType, append) {
+    var start = this.pos;
+    do {  // roll id_wireType back
+        --start;
+        this.pos = start;
+    } while (this.uint32() !== id_wireType);
+
+    this.skipType(id_wireType & 7);
+
+    var skipped;
+
+    /* istanbul ignore if */
+    if (Array.isArray(this.buf)) { // plain array
+        skipped = this.buf.slice(start, this.pos);
+    }
+    else {
+        skipped = this._slice.call(this.buf, start, this.pos);
+    }
+
+    if (append) {
+        append.push(skipped);
+    } else {
+        append = [skipped];
+    }
+
+    return append;
+};
+
 Reader._configure = function(BufferReader_) {
     BufferReader = BufferReader_;
 
@@ -7693,10 +7729,11 @@ function genVerifyValue(gen, field, fieldIndex, ref) {
             ("}");
         } else {
             gen
-            ((gen.hasErrorVar ? "" : "var ") + "e=types[%i].verify(%s);", fieldIndex, ref)
-            ("if(e)")
-                ("return%j+e", field.name + ".");
-            gen.hasErrorVar = true;
+            ("{")
+                ("var e=types[%i].verify(%s);", fieldIndex, ref)
+                ("if(e)")
+                    ("return%j+e", field.name + ".")
+            ("}");
         }
     } else {
         switch (field.type) {
@@ -7883,11 +7920,15 @@ wrappers[".google.protobuf.Any"] = {
         if (object && object["@type"]) {
             var type = this.lookup(object["@type"]);
             /* istanbul ignore else */
-            if (type)
+            if (type) {
+                // type_url does not accept leading "."
+                var type_url = object["@type"].charAt(0) === "." ?
+                    object["@type"].substr(1) : object["@type"];
                 return this.create({
-                    type_url: object["@type"],
-                    value: type.encode(object).finish()
+                    type_url: type_url,
+                    value: type.encode(type.fromObject(object)).finish()
                 });
+            }
         }
 
         return this.fromObject(object);

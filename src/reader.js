@@ -377,6 +377,41 @@ Reader.prototype.skipType = function(wireType) {
     return this;
 };
 
+
+/**
+ * Returns the next element of the specified wire type as bytes
+ * @param {number} id_wireType field id and wire type
+ * @param {Uint8Array} append previously encountered unknown fields, if any
+ * @returns {Uint8Array} value read
+ */
+Reader.prototype.rawBytes = function read_raw_bytes(id_wireType, append) {
+    var start = this.pos;
+    do {  // roll id_wireType back
+        --start;
+        this.pos = start;
+    } while (this.uint32() !== id_wireType);
+
+    this.skipType(id_wireType & 7);
+
+    var skipped;
+
+    /* istanbul ignore if */
+    if (Array.isArray(this.buf)) { // plain array
+        skipped = this.buf.slice(start, this.pos);
+    }
+    else {
+        skipped = this._slice.call(this.buf, start, this.pos);
+    }
+
+    if (append) {
+        append.push(skipped);
+    } else {
+        append = [skipped];
+    }
+
+    return append;
+};
+
 Reader._configure = function(BufferReader_) {
     BufferReader = BufferReader_;
 
